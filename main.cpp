@@ -81,28 +81,19 @@ int main(void)
     __enable_irq();
 
     /* Init the clocks */
-	printf("Init clocks...\r\n");
     clock_init();
-	printf("Clock init done\r\n");
 
-	cyhal_system_delay_ms(200);   
     /* Initialize retarget-io to use the debug UART port */
     cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX, CY_RETARGET_IO_BAUDRATE);
-	cyhal_system_delay_ms(50);            
 
     /* Initialize the User LED */
     cyhal_gpio_init(CYBSP_USER_LED, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_OFF);
 
     /* Initialize the PDM/PCM block */
     cyhal_pdm_pcm_init(&pdm_pcm, PDM_DATA, PDM_CLK, &audio_clock, &pdm_pcm_cfg);
-	cy_rslt_t pdm_result = cyhal_pdm_pcm_init(&pdm_pcm, PDM_DATA, PDM_CLK, &audio_clock, &pdm_pcm_cfg);
-	printf("PDM init result = 0x%08lX\r\n", pdm_result);
-
     cyhal_pdm_pcm_register_callback(&pdm_pcm, pdm_pcm_isr_handler, NULL);
     cyhal_pdm_pcm_enable_event(&pdm_pcm, CYHAL_PDM_PCM_ASYNC_COMPLETE, CYHAL_ISR_PRIORITY_DEFAULT, true);
     cyhal_pdm_pcm_start(&pdm_pcm);
-	printf("PDM/PCM started. Waiting for audio frames...\r\n");
-
 
     /* \x1b[2J\x1b[;H - ANSI ESC sequence for clear screen */
     printf("\x1b[2J\x1b[;H");
@@ -187,7 +178,6 @@ void pdm_pcm_isr_handler(void *arg, cyhal_pdm_pcm_event_t event)
     (void) event;
 
     pdm_pcm_flag = true;
-	printf("ISR: new audio frame ready\r\n");
 }
 
 /*******************************************************************************
@@ -212,3 +202,4 @@ void clock_init(void)
     cyhal_clock_set_source(&audio_clock, &pll_clock);
     cyhal_clock_set_enabled(&audio_clock, true, true);
 }
+

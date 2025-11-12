@@ -1,6 +1,3 @@
-//
-// Created by Macbook Pro 2023 on 11.11.2025.
-//
 #include "edge-impulse-sdk/classifier/ei_run_classifier.h"
 
 // testing on sample from test
@@ -35,14 +32,15 @@ int main(){
     // running classifier itself
     res = run_classifier(&signal, &result, false);
 
-    printf("\nPredictions made by classifier:\n");
+	printf("\nVoice recognition\n");
+    printf("Predictions made by classifier by classes:\n");
     for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
         printf("%s: %.5f\n",
                result.classification[ix].label, // class
                result.classification[ix].value); // probability
     }
 
-    printf("\nTime spent: DSP %d ms, classification %d ms\n",
+    printf("\nTime spent on prediction: DSP %d ms, classification %d ms\n",
           result.timing.dsp, result.timing.classification);
 
     return 0;

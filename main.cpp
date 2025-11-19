@@ -1,19 +1,25 @@
-extern "C" {
-#include "cyhal.h"
-#include "cybsp.h"
-#include "cy_retarget_io.h"
+/******************************************************************************
+* File Name:   main.cpp
+*******************************************************************************/
 
-#include "stdlib.h"
+extern "C"{
+	#include "cyhal.h"
+	#include "cybsp.h"
+	#include "cy_retarget_io.h"
+	#include "stdlib.h"
 }
-#include "edge-impulse-sdk/classifier/ei_run_classifier.h"
+
+#include "voice-recognition-cpp-mcu-v3/edge-impulse-sdk/dsp/numpy.hpp"
+#include "voice-recognition-cpp-mcu-v3/edge-impulse-sdk/classifier/ei_run_classifier.h"
 
 /*******************************************************************************
 * Macros
 ********************************************************************************/
-/* Define how many samples in a frame */
-#define FRAME_SIZE                  (3960)
-/* Volume ratio for noise and print purposes */
-#define VOLUME_RATIO                (4*FRAME_SIZE)
+#define FRAME_SIZE              (1024)
+#define TOTAL_SAMPLES               EI_CLASSIFIER_RAW_SAMPLE_COUNT 
+#define NUM_DMA_TRANSFERS           16u 
+
+
 /* Desired sample rate. Typical values: 8/16/22.05/32/44.1/48kHz */
 #define SAMPLE_RATE_HZ              16000u
 /* Decimation Rate of the PDM/PCM block. Typical value is 64 */
@@ -26,28 +32,28 @@ extern "C" {
 #define PDM_DATA                    P10_5
 #define PDM_CLK                     P10_4
 
-
 /*******************************************************************************
 * Function Prototypes
 ********************************************************************************/
-void pdm_pcm_isr_handler(void *arg, cyhal_pdm_pcm_event_t event);
-void clock_init(void);
-
-
-float input_buffer[FRAME_SIZE];
-/*******************************************************************************
-* Function from Edge Impulse, retrieves slices of data required by the DSP process.
-********************************************************************************/
-static int raw_feature_get_data(size_t offset, size_t length, float *out_ptr) {
-	memcpy(out_ptr, input_buffer + offset, length * sizeof(float));
-	return 0;
+extern "C" { 
+    void pdm_pcm_isr_handler(void *arg, cyhal_pdm_pcm_event_t event);
+    void clock_init(void);
 }
+/*******************************************************************************
+* Function Prototypes from Edge Impulse
+********************************************************************************/
+int raw_feature_get_data(size_t offset, size_t length, float *out_ptr);
 
 /*******************************************************************************
 * Global Variables
 ********************************************************************************/
 /* Interrupt flags */
-volatile bool pdm_pcm_flag = true;
+volatile bool pdm_pcm_flag = false;
+/* Audio buffer */
+int16_t audio_frame[TOTAL_SAMPLES] = {0}; 
+volatile uint32_t current_audio_offset = 0; 
+volatile uint32_t dma_transfer_count = 0;
+
 
 /* HAL Object */
 cyhal_pdm_pcm_t pdm_pcm;
@@ -55,20 +61,28 @@ cyhal_clock_t   audio_clock;
 cyhal_clock_t   pll_clock;
 
 /* HAL Config */
-const cyhal_pdm_pcm_cfg_t pdm_pcm_cfg =
+const cyhal_pdm_pcm_cfg_t pdm_pcm_cfg = 
 {
-	.sample_rate     = SAMPLE_RATE_HZ,
-	.decimation_rate = DECIMATION_RATE,
-	.mode            = CYHAL_PDM_PCM_MODE_STEREO,
-	.word_length     = 16,  /* bits */
-	.left_gain       = 24,   /* dB */
-	.right_gain      = 24,   /* dB */
+    .sample_rate     = SAMPLE_RATE_HZ,
+    .decimation_rate = DECIMATION_RATE,
+    .mode            = CYHAL_PDM_PCM_MODE_STEREO, 
+    .word_length     = 16,  /* bits */
+    .left_gain       = 0,   /* dB */
+    .right_gain      = 0,   /* dB */
 };
 
+int raw_feature_get_data(size_t offset, size_t length, float *out_ptr) {
+    // converting input data from audio buffer
+	return ei::numpy::int16_to_float(audio_frame + offset, out_ptr, length);
+};
+
+
+/*******************************************************************************
+* Function Name: main
+********************************************************************************/
 int main(void)
 {
     cy_rslt_t result;
-    int16_t  audio_frame[FRAME_SIZE] = {0};
 
     /* Initialize the device and board peripherals */
     result = cybsp_init() ;
@@ -94,67 +108,61 @@ int main(void)
     cyhal_pdm_pcm_register_callback(&pdm_pcm, pdm_pcm_isr_handler, NULL);
     cyhal_pdm_pcm_enable_event(&pdm_pcm, CYHAL_PDM_PCM_ASYNC_COMPLETE, CYHAL_ISR_PRIORITY_DEFAULT, true);
     cyhal_pdm_pcm_start(&pdm_pcm);
-
+    
     /* \x1b[2J\x1b[;H - ANSI ESC sequence for clear screen */
     printf("\x1b[2J\x1b[;H");
-
     printf("****************** \
-    PDM/PCM Example \
+    PDM/PCM Edge Impulse Integration \
     ****************** \r\n\n");
+    
+    // first audio recording
+    current_audio_offset = 0;
+    dma_transfer_count = 0;
+    cyhal_gpio_write(CYBSP_USER_LED, CYBSP_LED_STATE_ON);
+    printf("DEBUG: Starting reading audio from microphone\r\n");
+
+    cyhal_pdm_pcm_read_async(&pdm_pcm, audio_frame, FRAME_SIZE);
 
     for(;;)
     {
-        /* Check if any microphone has data to process */
+        /* Check if the full 16000 samples are ready */
         if (pdm_pcm_flag)
         {
+            // audio recorded
+            cyhal_gpio_write(CYBSP_USER_LED, CYBSP_LED_STATE_OFF);
+            printf("DEBUG: Ending reading audio\r\n"); 
+            
             /* Clear the PDM/PCM flag */
-            pdm_pcm_flag = 0;
-        	// wrapper for data
-        	signal_t signal;
-        	// to store inference output, result of classification
-        	ei_impulse_result_t result_inference;
-        	// return code from inference
-        	EI_IMPULSE_ERROR res;
+            pdm_pcm_flag = false;
 
-        	for (uint32_t index = 0; index < FRAME_SIZE; ++index)
-        	{
-        		input_buffer[index] = (float)audio_frame[index]/ 32768.0f;
-        	}
+            signal_t signal;
+            ei_impulse_result_t ei_result; 
+	        signal.total_length = TOTAL_SAMPLES;
+	        signal.get_data = &raw_feature_get_data;
+	
+            printf("DEBUG: Starting classifier\r\n"); 
+	      
+            EI_IMPULSE_ERROR ei_error = run_classifier(&signal, &ei_result, false); 
 
-        	// checking if buffer size is the same as input, the correctness of the transmitted data
-        	size_t buf_len = sizeof(input_buffer) / sizeof(input_buffer[0]);
+            printf("DEBUG: Classifier returned successfully. Results printing...\r\n"); 
+	
+			printf("****************** \
+			RESULTS of classifier \
+			****************** \r\n\n");
+	        for (size_t i = 0; i < EI_CLASSIFIER_LABEL_COUNT; i++) {
+	            printf("%s: %.3f\r\n", 
+	                ei_result.classification[i].label,
+	                ei_result.classification[i].value);
+	        }
 
-        	if (buf_len != EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE) {
-        		printf("ERROR: The size of the input buffer is not correct.\n");
-        		printf("Expected %d items, but got %d\n",
-					   EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, (int)buf_len);
-        		cyhal_pdm_pcm_read_async(&pdm_pcm, audio_frame, FRAME_SIZE);
-        		continue;
-        	}
-
-        	// information about data for buffer
-        	signal.total_length = EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE;
-        	signal.get_data = &raw_feature_get_data;
-
-        	cyhal_gpio_write(CYBSP_USER_LED, CYBSP_LED_STATE_ON);
-        	// running classifier itself
-        	res = run_classifier(&signal, &result_inference, false);
-        	cyhal_gpio_write(CYBSP_USER_LED, CYBSP_LED_STATE_OFF);
-
-        	printf("\nPredictions made by classifier:\n");
-        	for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
-        		printf("%s: %.5f\n",
-					   result_inference.classification[ix].label, // class
-					   result_inference.classification[ix].value); // probability
-        	}
-
-        	printf("\nTime spent: DSP %d ms, classification %d ms\n",
-				  result_inference.timing.dsp, result_inference.timing.classification);
-
-
-            /* Setup to read the next frame */
+            // new audio recording
+            current_audio_offset = 0;
+            dma_transfer_count = 0;
+            
+            cyhal_gpio_write(CYBSP_USER_LED, CYBSP_LED_STATE_ON);
             cyhal_pdm_pcm_read_async(&pdm_pcm, audio_frame, FRAME_SIZE);
         }
+
         cyhal_syspm_sleep();
 
     }
@@ -165,27 +173,31 @@ int main(void)
 * Function Name: pdm_pcm_isr_handler
 ********************************************************************************
 * Summary:
-*  PDM/PCM ISR handler. Set a flag to be processed in the main loop.
-*
-* Parameters:
-*  arg: not used
-*  event: event that occurred
-*
+* PDM/PCM ISR handler.
 *******************************************************************************/
 void pdm_pcm_isr_handler(void *arg, cyhal_pdm_pcm_event_t event)
 {
     (void) arg;
     (void) event;
 
-    pdm_pcm_flag = true;
+    dma_transfer_count++;
+
+    if (dma_transfer_count >= NUM_DMA_TRANSFERS) 
+    {
+        pdm_pcm_flag = true;
+    }
+    else
+    {
+        current_audio_offset = dma_transfer_count * FRAME_SIZE;
+        cyhal_pdm_pcm_read_async(&pdm_pcm, audio_frame + current_audio_offset, FRAME_SIZE);
+    }
 }
 
 /*******************************************************************************
 * Function Name: clock_init
 ********************************************************************************
 * Summary:
-*  Initialize the clocks in the system.
-*
+* Initialize the clocks in the system.
 *******************************************************************************/
 void clock_init(void)
 {
@@ -194,7 +206,7 @@ void clock_init(void)
     cyhal_clock_set_frequency(&pll_clock, AUDIO_SYS_CLOCK_HZ, NULL);
     cyhal_clock_set_enabled(&pll_clock, true, true);
 
-    /* Initialize the audio subsystem clock (CLK_HF[1])
+    /* Initialize the audio subsystem clock (CLK_HF[1]) 
      * The CLK_HF[1] is the root clock for the I2S and PDM/PCM blocks */
     cyhal_clock_reserve(&audio_clock, &CYHAL_CLOCK_HF[1]);
 
@@ -202,4 +214,4 @@ void clock_init(void)
     cyhal_clock_set_source(&audio_clock, &pll_clock);
     cyhal_clock_set_enabled(&audio_clock, true, true);
 }
-
+/* [] END OF FILE */

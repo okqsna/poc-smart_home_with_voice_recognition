@@ -768,8 +768,6 @@ __attribute__((unused)) int extract_spectrogram_per_slice_features(signal_t *sig
 __attribute__((unused)) int extract_mfe_features(signal_t *signal, matrix_t *output_matrix, void *config_ptr, const float sampling_frequency) {
     ei_dsp_config_mfe_t config = *((ei_dsp_config_mfe_t*)config_ptr);
 
-	printf("MFE_TRACE: 1. Entering MFE feature extraction\r\n");
-
     if (config.axes != 1) {
         EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
     }
@@ -820,8 +818,6 @@ __attribute__((unused)) int extract_mfe_features(signal_t *signal, matrix_t *out
     output_matrix->rows = out_matrix_size.rows;
     output_matrix->cols = out_matrix_size.cols;
 
-	printf("MFE_TRACE: 2. Matrix size calculated. Calling MFE (FFT/FPU)\r\n");
-
     int ret;
     // This probably seems incorrect, but the mfe func can actually handle all versions
     // There's a subtle issue with cmvn and v2, not worth tracking down
@@ -836,8 +832,6 @@ __attribute__((unused)) int extract_mfe_features(signal_t *signal, matrix_t *out
             frequency, config.frame_length, config.frame_stride, config.num_filters, config.fft_length,
             config.low_frequency, config.high_frequency, config.implementation_version);
     }
-
-	printf("MFE_TRACE: 3. MFE (FFT/FPU) finished\r\n");
 
     if (preemphasis) {
         delete preemphasis;
@@ -866,8 +860,6 @@ __attribute__((unused)) int extract_mfe_features(signal_t *signal, matrix_t *out
 
     output_matrix->cols = out_matrix_size.rows * out_matrix_size.cols;
     output_matrix->rows = 1;
-
-	printf("MFE_TRACE: 4. Exiting MFE feature extraction\r\n");
 
     return EIDSP_OK;
 }

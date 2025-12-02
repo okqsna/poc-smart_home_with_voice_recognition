@@ -11,11 +11,12 @@ extern "C"{
 
 #include "voice-recognition-cpp-mcu-v3/edge-impulse-sdk/dsp/numpy.hpp"
 #include "voice-recognition-cpp-mcu-v3/edge-impulse-sdk/classifier/ei_run_classifier.h"
+#include "cy_rgb_led.h"
 
 /*******************************************************************************
 * Macros
 ********************************************************************************/
-#define FRAME_SIZE              (1024)
+#define FRAME_SIZE              (1000)
 #define TOTAL_SAMPLES               EI_CLASSIFIER_RAW_SAMPLE_COUNT 
 #define NUM_DMA_TRANSFERS           16u 
 
@@ -142,11 +143,11 @@ int main(void)
 	
             printf("DEBUG: Starting classifier\r\n"); 
 	      
-            EI_IMPULSE_ERROR ei_error = run_classifier(&signal, &ei_result, true); 
+            EI_IMPULSE_ERROR ei_error = run_classifier(&signal, &ei_result, false); 
             if (ei_error != EI_IMPULSE_OK) {
                 printf("ERROR: run_classifier failed with code %d\r\n", ei_error); 
             } else if (ei_error == EI_IMPULSE_OK){
-				printf("DEBUG: running \n");
+				printf("DEBUG: running \r\n");
 			}
 			printf("DEBUG: Post-classifier check. Error code: %d\r\n", ei_error);
 

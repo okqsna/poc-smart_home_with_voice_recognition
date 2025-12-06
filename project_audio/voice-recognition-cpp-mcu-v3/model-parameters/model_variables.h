@@ -100,7 +100,7 @@ ei_learning_block_config_tflite_graph_t ei_learning_block_config_820755_3 = {
     .block_id = 3,
     .output_tensors_indices = ei_output_tensors_indices_820755_3,
     .output_tensors_size = ei_output_tensors_size_820755_3,
-    .quantized = 1,
+    .quantized = 0,
     .compiled = 1,
     .graph_config = (void*)&ei_config_graph_820755_3,
     .dequantize_output = 0,
@@ -120,11 +120,6 @@ const ei_learning_block_t ei_learning_blocks_820755_1[ei_learning_blocks_820755_
     },
 };
 
-ei_fill_result_classification_i8_config_t ei_fill_result_classification_i8_config_820755_3 = {
-    .zero_point = -128,
-    .scale = 0.00390625
-};
-
 const size_t ei_postprocessing_blocks_820755_1_size = 1;
 const ei_postprocessing_block_t ei_postprocessing_blocks_820755_1[ei_postprocessing_blocks_820755_1_size] = {
     {
@@ -132,9 +127,9 @@ const ei_postprocessing_block_t ei_postprocessing_blocks_820755_1[ei_postprocess
         .type = EI_CLASSIFIER_MODE_CLASSIFICATION,
         .init_fn = NULL,
         .deinit_fn = NULL,
-        .postprocess_fn = &process_classification_i8,
+        .postprocess_fn = &process_classification_f32,
         .display_fn = NULL,
-        .config = (void*)&ei_fill_result_classification_i8_config_820755_3,
+        .config = NULL,
         .input_block_id = 3
     },
 };
@@ -149,7 +144,7 @@ const ei_impulse_t impulse_820755_1 = {
     .project_name = "voice-recognition",
     .impulse_id = 1,
     .impulse_name = "Impulse #1",
-    .deploy_version = 6,
+    .deploy_version = 11,
 
     .nn_input_frame_size = 3960,
     .raw_sample_count = 16000,

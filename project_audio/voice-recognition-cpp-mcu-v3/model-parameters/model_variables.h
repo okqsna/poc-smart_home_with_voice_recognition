@@ -46,7 +46,7 @@
 #include "edge-impulse-sdk/classifier/inferencing_engines/engines.h"
 #include "edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_common.h"
 
-const char* ei_classifier_inferencing_categories_820755_1[] = { "light", "noise", "off" };
+const char* ei_classifier_inferencing_categories_820755_1[] = { "blue", "green", "light", "noise", "off", "red" };
 
 ei_dsp_named_axis_t ei_dsp_config_820755_5_named_axes[] = {
     { .name = "Signal", .axis = 0 }
@@ -100,7 +100,7 @@ ei_learning_block_config_tflite_graph_t ei_learning_block_config_820755_3 = {
     .block_id = 3,
     .output_tensors_indices = ei_output_tensors_indices_820755_3,
     .output_tensors_size = ei_output_tensors_size_820755_3,
-    .quantized = 0,
+    .quantized = 1,
     .compiled = 1,
     .graph_config = (void*)&ei_config_graph_820755_3,
     .dequantize_output = 0,
@@ -120,6 +120,11 @@ const ei_learning_block_t ei_learning_blocks_820755_1[ei_learning_blocks_820755_
     },
 };
 
+ei_fill_result_classification_i8_config_t ei_fill_result_classification_i8_config_820755_3 = {
+    .zero_point = -128,
+    .scale = 0.00390625
+};
+
 const size_t ei_postprocessing_blocks_820755_1_size = 1;
 const ei_postprocessing_block_t ei_postprocessing_blocks_820755_1[ei_postprocessing_blocks_820755_1_size] = {
     {
@@ -127,9 +132,9 @@ const ei_postprocessing_block_t ei_postprocessing_blocks_820755_1[ei_postprocess
         .type = EI_CLASSIFIER_MODE_CLASSIFICATION,
         .init_fn = NULL,
         .deinit_fn = NULL,
-        .postprocess_fn = &process_classification_f32,
+        .postprocess_fn = &process_classification_i8,
         .display_fn = NULL,
-        .config = NULL,
+        .config = (void*)&ei_fill_result_classification_i8_config_820755_3,
         .input_block_id = 3
     },
 };
@@ -144,7 +149,7 @@ const ei_impulse_t impulse_820755_1 = {
     .project_name = "voice-recognition",
     .impulse_id = 1,
     .impulse_name = "Impulse #1",
-    .deploy_version = 11,
+    .deploy_version = 12,
 
     .nn_input_frame_size = 3960,
     .raw_sample_count = 16000,
@@ -175,7 +180,7 @@ const ei_impulse_t impulse_820755_1 = {
     .slices_per_model_window = 4,
 
     .has_anomaly = EI_ANOMALY_TYPE_UNKNOWN,
-    .label_count = 3,
+    .label_count = 6,
     .categories = ei_classifier_inferencing_categories_820755_1,
     .results_type = EI_CLASSIFIER_TYPE_CLASSIFICATION,
     .freeform_outputs_size = freeform_outputs_820755_1_size,

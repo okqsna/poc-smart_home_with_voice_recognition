@@ -2,6 +2,7 @@
 * File Name:   main.cpp
 *******************************************************************************/
 
+#include <cstdint>
 extern "C"{
 	#include "cyhal.h"
 	#include "cybsp.h"
@@ -12,7 +13,6 @@ extern "C"{
 #include "voice-recognition-cpp-mcu-v3/edge-impulse-sdk/dsp/numpy.hpp"
 #include "voice-recognition-cpp-mcu-v3/edge-impulse-sdk/classifier/ei_run_classifier.h"
 
-
 /*******************************************************************************
 * Macros
 ********************************************************************************/
@@ -21,17 +21,25 @@ extern "C"{
 #define NUM_DMA_TRANSFERS           16u 
 
 
-/* Desired sample rate. Typical values: 8/16/22.05/32/44.1/48kHz */
+/* Desired sample rate */
 #define SAMPLE_RATE_HZ              16000u
-/* Decimation Rate of the PDM/PCM block. Typical value is 64 */
+/* Decimation Rate of the PDM/PCM block */
 #define DECIMATION_RATE             64u
-/* Audio Subsystem Clock. Typical values depends on the desire sample rate:
-- 8/16/48kHz    : 24.576 MHz
-- 22.05/44.1kHz : 22.579 MHz */
+/* Audio Subsystem Clock */
 #define AUDIO_SYS_CLOCK_HZ          24576000u
 /* PDM/PCM Pins */
 #define PDM_DATA                    P10_5
 #define PDM_CLK                     P10_4
+#define CORRECT_CLASSIFICATION 		0.5
+/* EXTERNAL Leds */
+#define EXT_LED_RED             P6_2
+#define EXT_LED_GREEN           P9_7
+#define EXT_LED_BLUE            P10_6
+
+/* BOARD Leds */
+#define RGB_LED_GREEN 			P1_1
+#define RGB_LED_RED				P0_3
+#define RGB_LED_BLUE			P11_1
 
 /*******************************************************************************
 * Function Prototypes
@@ -51,18 +59,20 @@ int raw_feature_get_data(size_t offset, size_t length, float *out_ptr);
 * Global Variables
 ********************************************************************************/
 /* Interrupt flags */
-volatile bool pdm_pcm_flag = false;
-volatile bool timer_interrupt_flag = false;
+bool pdm_pcm_flag = false;
+bool timer_interrupt_flag = false;
+bool led_lighted = false;
 /* Audio buffer */
 int16_t audio_frame[TOTAL_SAMPLES] = {0};
-volatile uint32_t current_audio_offset = 0; 
-volatile uint32_t dma_transfer_count = 0;
+uint32_t current_audio_offset = 0; 
+uint32_t dma_transfer_count = 0;
 
 
 /* HAL Object */
 cyhal_pdm_pcm_t pdm_pcm;
 cyhal_clock_t   audio_clock;
 cyhal_clock_t   pll_clock;
+cyhal_spi_t spi;
 cyhal_timer_t timer_obj;
 
 /* HAL Config PDM PCM */
@@ -116,33 +126,34 @@ int main(void)
     
     /* Init the timer */
     timer_init();
-    
 
     /* Initialize retarget-io to use the debug UART port */
     cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX, CY_RETARGET_IO_BAUDRATE);
 
-    /* Initialize the User LED */
+    /* Initialize the User LED and LED 8*/
     cyhal_gpio_init(CYBSP_USER_LED, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_OFF);
+    
+    cyhal_gpio_init(RGB_LED_RED, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_OFF);
+    cyhal_gpio_init(RGB_LED_GREEN, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_OFF);
+    cyhal_gpio_init(RGB_LED_BLUE, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_OFF);
+    
+    /* Initialize external LED's */
+    cyhal_gpio_init(EXT_LED_RED, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_ON);
+    cyhal_gpio_init(EXT_LED_GREEN, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_ON);
+    cyhal_gpio_init(EXT_LED_BLUE, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_ON);
+    
 
     /* Initialize the PDM/PCM block */
     cyhal_pdm_pcm_init(&pdm_pcm, PDM_DATA, PDM_CLK, &audio_clock, &pdm_pcm_cfg);
     cyhal_pdm_pcm_register_callback(&pdm_pcm, pdm_pcm_isr_handler, NULL);
     cyhal_pdm_pcm_enable_event(&pdm_pcm, CYHAL_PDM_PCM_ASYNC_COMPLETE, CYHAL_ISR_PRIORITY_DEFAULT, true);
     cyhal_pdm_pcm_start(&pdm_pcm);
-    
-    
-    printf("\x1b[2J\x1b[;H");
-    printf("****************** \
-    PDM/PCM Edge Impulse Integration \
-    ****************** \r\n\n");
+   
 
     for(;;)
-    {
-		
+    {	
 		if (timer_interrupt_flag){
 			timer_interrupt_flag = false;
-			printf("Timer fired → starting audio recording\r\n");
-
 	        current_audio_offset = 0;
 	        dma_transfer_count = 0;
 	
@@ -154,10 +165,10 @@ int main(void)
         if (pdm_pcm_flag)
         {
             // audio recorded
+            pdm_pcm_flag = false;
             cyhal_gpio_write(CYBSP_USER_LED, CYBSP_LED_STATE_OFF);
             printf("Ending reading audio\r\n"); 
-            
-            pdm_pcm_flag = false;
+
 
             signal_t signal;
             ei_impulse_result_t ei_result; 
@@ -183,6 +194,28 @@ int main(void)
 	                ei_result.classification[i].label,
 	                ei_result.classification[i].value);
 	        }
+	        
+	        if (ei_result.classification[2].value >= CORRECT_CLASSIFICATION){
+				cyhal_gpio_write(RGB_LED_GREEN, CYBSP_LED_STATE_ON);
+			} else if (ei_result.classification[4].value >= CORRECT_CLASSIFICATION){
+				cyhal_gpio_write(RGB_LED_GREEN, CYBSP_LED_STATE_OFF);
+				
+				cyhal_gpio_write(EXT_LED_RED, CYBSP_LED_STATE_ON);
+				cyhal_gpio_write(EXT_LED_BLUE, CYBSP_LED_STATE_ON);
+				cyhal_gpio_write(EXT_LED_GREEN, CYBSP_LED_STATE_ON);
+				
+			} else if (ei_result.classification[5].value >= CORRECT_CLASSIFICATION){
+				cyhal_gpio_write(EXT_LED_RED, CYBSP_LED_STATE_OFF);
+				cyhal_gpio_write(RGB_LED_RED, CYBSP_LED_STATE_ON);
+				
+			} else if (ei_result.classification[0].value >= CORRECT_CLASSIFICATION){
+				cyhal_gpio_write(EXT_LED_BLUE, CYBSP_LED_STATE_OFF);
+				cyhal_gpio_write(RGB_LED_BLUE, CYBSP_LED_STATE_ON);
+				
+			} else if (ei_result.classification[1].value >= CORRECT_CLASSIFICATION){
+				cyhal_gpio_write(EXT_LED_GREEN, CYBSP_LED_STATE_OFF);
+				cyhal_gpio_write(RGB_LED_GREEN, CYBSP_LED_STATE_ON);
+			}
 			
 			printf("Waiting for next timer...\r\n");
         }
@@ -191,6 +224,21 @@ int main(void)
 
     }
 }
+
+
+/* Function Name: timer_isr_handler
+********************************************************************************
+* Summary:
+* Timer for recordings ISR handler.
+*******************************************************************************/
+void timer_isr_handler(void *callback_arg, cyhal_timer_event_t event)
+{
+    (void) callback_arg;
+    (void) event;
+    
+    timer_interrupt_flag = true;
+}
+
 
 
 /*******************************************************************************
@@ -216,22 +264,6 @@ void pdm_pcm_isr_handler(void *arg, cyhal_pdm_pcm_event_t event)
         cyhal_pdm_pcm_read_async(&pdm_pcm, audio_frame + current_audio_offset, FRAME_SIZE);
     }
 }
-
-
-/*******************************************************************************
-* Function Name: timer_isr_handler
-********************************************************************************
-* Summary:
-* Timer for recordings ISR handler.
-*******************************************************************************/
-void timer_isr_handler(void *callback_arg, cyhal_timer_event_t event)
-{
-    (void) callback_arg;
-    (void) event;
-    
-    timer_interrupt_flag = true;
-}
-
 
 /*******************************************************************************
 * Function Name: timer_init

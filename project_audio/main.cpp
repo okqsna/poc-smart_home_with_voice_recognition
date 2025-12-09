@@ -32,9 +32,10 @@ extern "C"{
 #define PDM_CLK                     P10_4
 #define CORRECT_CLASSIFICATION 		0.5
 /* EXTERNAL Leds */
-#define EXT_LED_RED             P6_2
-#define EXT_LED_GREEN           P9_7
-#define EXT_LED_BLUE            P10_6
+#define EXT_LED_RED             P9_6
+#define EXT_LED_GREEN           P10_6
+#define EXT_LED_BLUE            P9_7
+#define EXT_LED_YELLOW 			P6_2
 
 /* BOARD Leds */
 #define RGB_LED_GREEN 			P1_1
@@ -104,6 +105,9 @@ int raw_feature_get_data(size_t offset, size_t length, float *out_ptr) {
 };
 
 
+
+
+
 /*******************************************************************************
 * Function Name: main
 ********************************************************************************/
@@ -141,13 +145,15 @@ int main(void)
     cyhal_gpio_init(EXT_LED_RED, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_ON);
     cyhal_gpio_init(EXT_LED_GREEN, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_ON);
     cyhal_gpio_init(EXT_LED_BLUE, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_ON);
-    
+    cyhal_gpio_init(EXT_LED_YELLOW, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_ON);
+
 
     /* Initialize the PDM/PCM block */
     cyhal_pdm_pcm_init(&pdm_pcm, PDM_DATA, PDM_CLK, &audio_clock, &pdm_pcm_cfg);
     cyhal_pdm_pcm_register_callback(&pdm_pcm, pdm_pcm_isr_handler, NULL);
     cyhal_pdm_pcm_enable_event(&pdm_pcm, CYHAL_PDM_PCM_ASYNC_COMPLETE, CYHAL_ISR_PRIORITY_DEFAULT, true);
     cyhal_pdm_pcm_start(&pdm_pcm);
+
    
 
     for(;;)
@@ -196,25 +202,65 @@ int main(void)
 	        }
 	        
 	        if (ei_result.classification[2].value >= CORRECT_CLASSIFICATION){
-				cyhal_gpio_write(RGB_LED_GREEN, CYBSP_LED_STATE_ON);
-			} else if (ei_result.classification[4].value >= CORRECT_CLASSIFICATION){
+				// light
+				cyhal_gpio_write(EXT_LED_YELLOW, CYBSP_LED_STATE_OFF);
+
+				cyhal_gpio_write(RGB_LED_RED, CYBSP_LED_STATE_OFF);
 				cyhal_gpio_write(RGB_LED_GREEN, CYBSP_LED_STATE_OFF);
+				cyhal_gpio_write(RGB_LED_BLUE, CYBSP_LED_STATE_OFF);
 				
 				cyhal_gpio_write(EXT_LED_RED, CYBSP_LED_STATE_ON);
-				cyhal_gpio_write(EXT_LED_BLUE, CYBSP_LED_STATE_ON);
 				cyhal_gpio_write(EXT_LED_GREEN, CYBSP_LED_STATE_ON);
+				cyhal_gpio_write(EXT_LED_BLUE, CYBSP_LED_STATE_ON);
+
+			} else if (ei_result.classification[4].value >= CORRECT_CLASSIFICATION){
+				// off
+				cyhal_gpio_write(RGB_LED_RED, CYBSP_LED_STATE_OFF);
+				cyhal_gpio_write(RGB_LED_GREEN, CYBSP_LED_STATE_OFF);
+				cyhal_gpio_write(RGB_LED_BLUE, CYBSP_LED_STATE_OFF);
+				
+				cyhal_gpio_write(EXT_LED_RED, CYBSP_LED_STATE_ON);
+				cyhal_gpio_write(EXT_LED_GREEN, CYBSP_LED_STATE_ON);
+				cyhal_gpio_write(EXT_LED_BLUE, CYBSP_LED_STATE_ON);
+				cyhal_gpio_write(EXT_LED_YELLOW, CYBSP_LED_STATE_ON);
 				
 			} else if (ei_result.classification[5].value >= CORRECT_CLASSIFICATION){
+				// red
+				
 				cyhal_gpio_write(EXT_LED_RED, CYBSP_LED_STATE_OFF);
 				cyhal_gpio_write(RGB_LED_RED, CYBSP_LED_STATE_ON);
+
+				cyhal_gpio_write(EXT_LED_GREEN, CYBSP_LED_STATE_ON);
+				cyhal_gpio_write(EXT_LED_BLUE, CYBSP_LED_STATE_ON);
+				cyhal_gpio_write(EXT_LED_YELLOW, CYBSP_LED_STATE_ON);
+
+				cyhal_gpio_write(RGB_LED_GREEN, CYBSP_LED_STATE_OFF);
+				cyhal_gpio_write(RGB_LED_BLUE, CYBSP_LED_STATE_OFF);
 				
 			} else if (ei_result.classification[0].value >= CORRECT_CLASSIFICATION){
+				// blue
 				cyhal_gpio_write(EXT_LED_BLUE, CYBSP_LED_STATE_OFF);
 				cyhal_gpio_write(RGB_LED_BLUE, CYBSP_LED_STATE_ON);
+
+				cyhal_gpio_write(RGB_LED_RED, CYBSP_LED_STATE_OFF);
+				cyhal_gpio_write(RGB_LED_GREEN, CYBSP_LED_STATE_OFF);
+
+				cyhal_gpio_write(EXT_LED_RED, CYBSP_LED_STATE_ON);
+				cyhal_gpio_write(EXT_LED_GREEN, CYBSP_LED_STATE_ON);
+				cyhal_gpio_write(EXT_LED_YELLOW, CYBSP_LED_STATE_ON);
+
 				
 			} else if (ei_result.classification[1].value >= CORRECT_CLASSIFICATION){
+				// green
 				cyhal_gpio_write(EXT_LED_GREEN, CYBSP_LED_STATE_OFF);
 				cyhal_gpio_write(RGB_LED_GREEN, CYBSP_LED_STATE_ON);
+
+				cyhal_gpio_write(EXT_LED_RED, CYBSP_LED_STATE_ON);
+				cyhal_gpio_write(EXT_LED_BLUE, CYBSP_LED_STATE_ON);
+				cyhal_gpio_write(EXT_LED_YELLOW, CYBSP_LED_STATE_ON);
+
+				cyhal_gpio_write(RGB_LED_BLUE, CYBSP_LED_STATE_OFF);
+				cyhal_gpio_write(RGB_LED_RED, CYBSP_LED_STATE_OFF);				
 			}
 			
 			printf("Waiting for next timer...\r\n");

@@ -3,7 +3,7 @@
 > Term project "Smart home with voice recognition" from Principles of Computer Organization
 
 This project implements a real-time voice-controlled lighting system based on the PSoC 6 BLE Pioneer Kit.
-A custom Keyword Spotting (KWS) model trained with Edge Impulse recognizes six voice commands and controls both onboard and external LEDs through GPIO, PWM, and timers.
+A custom Keyword Spotting (KWS) model trained with Edge Impulse recognizes 5 voice commands and controls both onboard and external LEDs through GPIO, PWM, and timers.
 
 ### Overview
 The system listens continuously through the onboard PDM microphone, processes audio with Mel-frequency features, runs a deep-learning classifier, and triggers different lighting effects:

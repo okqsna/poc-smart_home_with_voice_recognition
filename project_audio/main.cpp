@@ -115,7 +115,7 @@ const cyhal_timer_cfg_t timer_cfg =
 		.is_continuous = true,                    
 	    .direction     = CYHAL_TIMER_DIR_UP,      
 	    .is_compare    = false,                   
-	    .period        = 70000,                   
+	    .period        = 30000,                   
 	    .compare_value = 0,                       
 	    .value         = 0                           
 };
